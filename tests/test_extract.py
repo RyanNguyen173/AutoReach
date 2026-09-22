@@ -15,6 +15,10 @@ def by_email(contacts):
     return {c.email: (c.name, c.title, c.department) for c in contacts}
 
 
+def by_form_url(contacts):
+    return {c.contact_form_url: (c.name, c.title, c.department) for c in contacts}
+
+
 def test_table_directory():
     got = by_email(extract_contacts(load("table.html"), "https://example.org/staff"))
     assert got == {
@@ -66,6 +70,23 @@ def test_form_link_directory_has_no_emails():
             "https://example.org/fs/form-manager/view/44444444-4444-4444-4444-444444444444",
         ),
     }
+
+
+def test_generic_two_column_layout_doesnt_merge_people():
+    got = by_form_url(extract_contacts(load("two_column_merge.html"), "https://example.org/staff"))
+    assert got == {
+        "https://example.org/fs/form-manager/view/55555555-5555-5555-5555-555555555555": (
+            "Dana Ellis", "Math", "",
+        ),
+        "https://example.org/fs/form-manager/view/66666666-6666-6666-6666-666666666666": (
+            "Omar Reyes", "Science", "",
+        ),
+    }
+
+
+def test_site_wide_utility_form_links_are_dropped():
+    contacts = extract_contacts(load("utility_form_links.html"))
+    assert contacts == []
 
 
 def test_apptegy_rendered_directory():

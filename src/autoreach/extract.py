@@ -12,7 +12,10 @@ DEPT_KEYS = ("department", "dept", "location", "school", "building", "subject", 
 
 _LABEL_RE = re.compile(r"^(e-?mail|phone|tel|fax|website|contact|send (an )?email|ext\.?)\b\s*:?\s*$", re.I)
 _PHONE_RE = re.compile(r"^[\s\d().+\-x:]*\d{3}[\s\d().+\-x:]*$", re.I)
-_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z.'\-]*(?:,?\s+[A-Za-z][A-Za-z.'\-]*){1,4}$")
+# Every word capitalized, like a real personal name - excludes phrases such
+# as "Click here" or generic sentence fragments that would otherwise pass a
+# looser check.
+_NAME_RE = re.compile(r"^[A-Z][A-Za-z.'\-]*(?:,?\s+[A-Z][A-Za-z.'\-]*){1,4}$")
 _PAGE_PARAMS = {"page", "const_page", "pagenumber", "pg", "p"}
 _LEADING_PUNCT_RE = re.compile(r"^[,;:\-–—]+\s*")
 
@@ -20,6 +23,15 @@ _LEADING_PUNCT_RE = re.compile(r"^[,;:\-–—]+\s*")
 # fs/form-manager is the known case) that route messages through a web form
 # and never put the person's real email address in the page at all.
 FORM_LINK_RE = re.compile(r"/fs/form-manager/view/[0-9a-f-]{8,}", re.I)
+
+# Site-wide utility links that happen to match FORM_LINK_RE (a general
+# "can't find who you need" catch-all form, a records-request form in the
+# footer, ...) - these aren't a specific staff member, so they're dropped
+# even if a name-shaped heading ends up nearby.
+_GENERIC_LINK_NAMES = {
+    "click here", "get in touch", "quick links", "contact us", "records request",
+    "having trouble", "contact the school", "general inquiries",
+}
 
 
 def extract_contacts(html: str, base_url: str = "") -> list[Contact]:
@@ -29,6 +41,10 @@ def extract_contacts(html: str, base_url: str = "") -> list[Contact]:
     for kind, value, node in _contact_nodes(soup, base_url):
         container = _container(node, counts)
         name, title, dept = _fields(container, node) if container else ("", "", "")
+        if kind == "form" and (not name or name.strip().lower() in _GENERIC_LINK_NAMES):
+            # A site-wide utility form (no real name found, or a known
+            # catch-all like "Click here" / "Get In Touch"), not a person.
+            continue
         if kind == "email":
             contacts.append(Contact(email=value, name=name, title=title, department=dept, source_url=base_url))
         else:
@@ -116,6 +132,14 @@ def _is_repeated(el: Tag, counts: dict[int, set[str]]) -> bool:
     )
 
 
+def _linked_name_count(el: Tag) -> int:
+    """How many <a> tags inside el have name-shaped text. A real one-person
+    container has at most one (the contact link itself) - job titles and
+    departments are normal text, never wrapped in a link. More than one
+    usually means two different people's entries got merged together."""
+    return sum(1 for a in el.find_all("a") if looks_like_name(_text(a)))
+
+
 def _container(node: Tag, counts: dict[int, set[str]]) -> Tag | None:
     """The smallest ancestor that is one person's row or card."""
     best = None
@@ -123,6 +147,12 @@ def _container(node: Tag, counts: dict[int, set[str]]) -> Tag | None:
         if not isinstance(anc, Tag) or anc.name in ("body", "html", "[document]"):
             break
         if len(_contacts_in(anc, counts)) > 1 or len(anc.get_text(" ", strip=True)) > 600:
+            break
+        # A generic layout wrapper reused across the page (e.g. a two-column
+        # row used both for a pair of staff members and for unrelated footer
+        # sections) can look "repeated" without actually being a list of
+        # people - don't grow into it once it would mix in a second name.
+        if best is not None and _linked_name_count(anc) > 1:
             break
         best = anc
         if anc.name == "tr" or _is_repeated(anc, counts):
