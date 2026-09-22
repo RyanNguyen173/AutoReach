@@ -1,4 +1,5 @@
 import csv
+import json
 import logging
 import sys
 from pathlib import Path
@@ -7,6 +8,7 @@ import typer
 
 from .extract import extract_contacts, find_page_links
 from .fetch import Fetcher, RobotsDisallowed
+from .forms import parse_form
 from .models import Contact
 
 app = typer.Typer(help="AutoReach: find contacts in staff directories.", no_args_is_help=True)
@@ -55,7 +57,7 @@ def extract(
 
     unique: dict[str, Contact] = {}
     for c in contacts:
-        unique.setdefault(c.email, c)
+        unique.setdefault(c.email or c.contact_form_url, c)
     contacts = list(unique.values())
 
     out = output.open("w", newline="", encoding="utf-8") if output else sys.stdout
@@ -68,6 +70,56 @@ def extract(
             out.close()
 
     unnamed = sum(1 for c in contacts if not c.name)
-    typer.echo(f"Read {fetched} page(s), found {len(contacts)} contact(s), {unnamed} without a name.", err=True)
+    form_only = sum(1 for c in contacts if not c.email and c.contact_form_url)
+    typer.echo(
+        f"Read {fetched} page(s), found {len(contacts)} contact(s), {unnamed} without a name, "
+        f"{form_only} reachable only through a contact form (no email shown on the site).",
+        err=True,
+    )
     if fetched == 0:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def form(
+    source: str = typer.Argument(..., help="A contact_form_url from a CSV, or a saved .html file."),
+    delay: float = typer.Option(1.0, "--delay"),
+    cache_dir: Path = typer.Option(Path(".cache/html"), "--cache-dir"),
+) -> None:
+    """Show the fields on a "contact this person" form page, so you know what a
+    submission needs. This only reads the page - it never fills in or sends
+    anything."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+
+    if Path(source).is_file():
+        html = Path(source).read_text(encoding="utf-8")
+    else:
+        fetcher = Fetcher(cache_dir=cache_dir, delay=delay)
+        try:
+            html = fetcher.get_html(source)
+        except RobotsDisallowed as e:
+            typer.echo(f"Skipped: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
+    cform = parse_form(html, base_url=source)
+    if cform is None:
+        typer.echo("No <form> found on that page.", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(json.dumps({
+        "action": cform.action,
+        "method": cform.method,
+        "has_captcha": cform.has_captcha,
+        "fields": [
+            {"label": f.label, "name": f.name, "kind": f.kind, "required": f.required}
+            for f in cform.visible_fields()
+        ],
+    }, indent=2))
+
+    if cform.has_captcha:
+        typer.echo(
+            "\nThis form uses CAPTCHA verification. AutoReach does not solve CAPTCHAs, so "
+            "this contact will likely need to be filled in and submitted by a person, not "
+            "sent automatically.",
+            err=True,
+        )

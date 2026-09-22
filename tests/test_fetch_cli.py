@@ -76,7 +76,7 @@ def test_cli_follows_pages_and_writes_csv(site, tmp_path):
     rows = list(csv.DictReader(out.open()))
     emails = {r["email"] for r in rows}
     assert "mdelgado@example.org" in emails and "rchen@example.org" in emails
-    assert list(rows[0]) == ["name", "title", "department", "email", "source_url"]
+    assert list(rows[0]) == ["name", "title", "department", "email", "contact_form_url", "source_url"]
 
 
 def test_cli_reads_saved_file(tmp_path):
@@ -84,3 +84,25 @@ def test_cli_reads_saved_file(tmp_path):
     result = CliRunner().invoke(app, ["extract", str(FIXTURES / "obfuscated.html"), "-o", str(out)])
     assert result.exit_code == 0, result.output
     assert len(list(csv.DictReader(out.open()))) == 4
+
+
+def test_cli_extract_reports_form_only_contacts(tmp_path):
+    out = tmp_path / "contacts.csv"
+    result = CliRunner().invoke(app, ["extract", str(FIXTURES / "form_links_directory.html"), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    rows = list(csv.DictReader(out.open()))
+    assert len(rows) == 4
+    assert all(r["email"] == "" and r["contact_form_url"] for r in rows)
+    assert "4 reachable only through a contact form" in result.output
+
+
+def test_cli_form_command_lists_fields(tmp_path):
+    result = CliRunner().invoke(app, ["form", str(FIXTURES / "contact_form.html")])
+    assert result.exit_code == 0, result.output
+    assert "field_first" in result.output
+    assert "Your First Name" in result.output
+
+
+def test_cli_form_command_warns_about_captcha(tmp_path):
+    result = CliRunner().invoke(app, ["form", str(FIXTURES / "contact_form.html")])
+    assert "CAPTCHA" in result.output

@@ -1,0 +1,25 @@
+<!--
+Synthetic fixture: a Finalsite-style "contact this staff member" form page
+(the target of a form_links_directory.html link). Field structure mirrors
+a real district's form; IDs and sitekeys are placeholders, not real ones.
+-->
+<html><head><title>Email Mrs. Example</title></head>
+<body>
+<h1>Email Mrs. Example</h1>
+<form class="fsForm" id="fsForm_0" method="post">
+  <input name="submission_uuid" type="hidden" value="abc123">
+  <fieldset id="field_1">
+    <legend>Your Name</legend>
+    <input id="field_first" name="field_first" type="text" data-required="true" placeholder="Your First Name">
+    <input id="field_last" name="field_last" type="text" data-required="true" placeholder="Your Last Name">
+  </fieldset>
+  <label for="field_phone">Phone Number</label>
+  <input id="field_phone" name="field_phone" type="text" data-required="true">
+  <label for="field_email">Email Address</label>
+  <input id="field_email" name="field_email" type="email" data-required="true">
+  <label for="field_message">Message</label>
+  <textarea id="field_message" name="field_message" data-required="true" rows="3"></textarea>
+  <div class="g-recaptcha-score-element" data-sitekey="placeholder-sitekey"></div>
+  <button type="submit">Submit</button>
+</form>
+</body></html>

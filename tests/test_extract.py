@@ -45,6 +45,29 @@ def test_obfuscated_directory():
     }
 
 
+def test_form_link_directory_has_no_emails():
+    contacts = extract_contacts(load("form_links_directory.html"), "https://example.org/staff")
+    by_name = {c.name: (c.title, c.email, c.contact_form_url) for c in contacts}
+    assert by_name == {
+        "Cynthia Decker": (
+            "Head Principal", "",
+            "https://example.org/fs/form-manager/view/11111111-1111-1111-1111-111111111111",
+        ),
+        "Lauren Summers": (
+            "Principal Secretary (405) 555-4898", "",
+            "https://example.org/fs/form-manager/view/22222222-2222-2222-2222-222222222222",
+        ),
+        "Amber Balderrama": (
+            "Senior Principal", "",
+            "https://example.org/fs/form-manager/view/33333333-3333-3333-3333-333333333333",
+        ),
+        "Matthew Stevens": (
+            "Junior Principal", "",
+            "https://example.org/fs/form-manager/view/44444444-4444-4444-4444-444444444444",
+        ),
+    }
+
+
 def test_apptegy_rendered_directory():
     got = by_email(extract_contacts(load("apptegy_cards.html")))
     assert got == {
