@@ -1,0 +1,14 @@
+<!-- Synthetic fixture: directory built by JavaScript after load. People and addresses are fictional. -->
+<html><body>
+<h1>Staff</h1>
+<div id="staff"></div>
+<script>
+  const people = [
+    ["Grace Lee", "Librarian", "glee@example.org"],
+    ["Marcus Bell", "Athletic Director", "mbell@example.org"],
+  ];
+  document.getElementById("staff").innerHTML = people.map(([n, t, e]) =>
+    `<div class="staff-card"><span class="staff-name">${n}</span><span class="staff-title">${t}</span><a href="mailto:${e}">${e}</a></div>`
+  ).join("");
+</script>
+</body></html>
