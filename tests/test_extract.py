@@ -45,6 +45,14 @@ def test_obfuscated_directory():
     }
 
 
+def test_apptegy_rendered_directory():
+    got = by_email(extract_contacts(load("apptegy_cards.html")))
+    assert got == {
+        "macosta2@example.org": ("Michelle Acosta", "HQ TA", ""),
+        "tadams@example.org": ("Terry Adams", "Director of Aviation Academy", ""),
+    }
+
+
 def test_js_page_has_nothing_without_rendering():
     assert extract_contacts(load("js_rendered.html")) == []
 

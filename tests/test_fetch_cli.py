@@ -43,6 +43,19 @@ def test_robots_txt_is_respected(site, tmp_path):
         fetcher.get_html(f"{site}/private/")
 
 
+def test_robots_txt_blocked_by_server_means_no_restrictions(tmp_path):
+    """A 401/403/404 fetching robots.txt itself (common with bot-blocking) is not
+    a statement that the whole site is off-limits - it means none were published."""
+    (tmp_path / "site").mkdir()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(tmp_path / "site")))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        fetcher = Fetcher(cache_dir=tmp_path / "cache", delay=0)
+        assert fetcher.allowed(f"http://127.0.0.1:{server.server_port}/staff")
+    finally:
+        server.shutdown()
+
+
 def test_second_fetch_uses_cache(site, tmp_path):
     cache = tmp_path / "cache"
     first = Fetcher(cache_dir=cache, delay=0)

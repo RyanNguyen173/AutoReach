@@ -51,9 +51,9 @@ class Fetcher:
             rp = RobotFileParser()
             try:
                 resp = self.client.get(origin + "/robots.txt")
-                if resp.status_code in (401, 403):
-                    rp.disallow_all = True
-                elif resp.status_code >= 400:
+                if resp.status_code >= 400:
+                    # A missing or blocked robots.txt (401/403/404/...) means no
+                    # restrictions were published, per how major crawlers behave.
                     rp.allow_all = True
                 else:
                     rp.parse(resp.text.splitlines())
