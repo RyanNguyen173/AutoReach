@@ -47,6 +47,23 @@ def _cache_key(base_url: str, links: list[tuple[str, str]]) -> str:
     return hashlib.sha1(payload.encode()).hexdigest()
 
 
+def _extract_answer(raw_text: str, valid_urls: set[str]) -> str | None:
+    """Pull the model's pick out of its reply. Despite being told to answer
+    with ONLY the URL, models often wrap it in a code fence, add a trailing
+    period, or preface it with a word or two - so this tries an exact match
+    first, then a substring search for one of the *actual* candidate URLs
+    (never anything the model might have invented) before giving up."""
+    text = raw_text.strip().strip("`").strip()
+    if text in valid_urls:
+        return text
+    if text.upper() == "NONE":
+        return None
+    found = [u for u in valid_urls if u in text]
+    if len(found) == 1:
+        return found[0]
+    return None
+
+
 def find_directory_via_ai(
     html: str,
     base_url: str,
@@ -85,11 +102,10 @@ def find_directory_via_ai(
             timeout=30.0,
         )
         resp.raise_for_status()
-        text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        if text in valid_urls:
-            result = text
-        elif text != "NONE":
-            log.warning("AI fallback returned an unrecognized URL, ignoring: %r", text)
+        raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        result = _extract_answer(raw_text, valid_urls)
+        if result is None and raw_text.strip().upper() != "NONE":
+            log.info("AI fallback: model's answer didn't match a candidate link: %r", raw_text.strip())
     except (httpx.HTTPError, KeyError, IndexError, ValueError) as e:
         log.warning("AI fallback failed for %s: %s", base_url, e)
         return None

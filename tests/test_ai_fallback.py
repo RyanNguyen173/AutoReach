@@ -50,6 +50,29 @@ def test_model_saying_none_returns_none(monkeypatch, tmp_path):
     assert result is None
 
 
+def test_accepts_a_pick_wrapped_in_extra_formatting(monkeypatch, tmp_path):
+    """Despite being told to reply with ONLY the URL, models often wrap it
+    in a code fence, add a trailing period, or preface it with a word or
+    two - the exact URL is still in there and should still be accepted."""
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _fake_response("`https://example.org/connect`"))
+
+    result = ai_fallback.find_directory_via_ai(
+        HOMEPAGE, "https://example.org", api_key="fake-key", cache_dir=tmp_path,
+    )
+
+    assert result == "https://example.org/connect"
+
+
+def test_lowercase_none_is_also_recognized(monkeypatch, tmp_path):
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _fake_response("none"))
+
+    result = ai_fallback.find_directory_via_ai(
+        HOMEPAGE, "https://example.org", api_key="fake-key", cache_dir=tmp_path,
+    )
+
+    assert result is None
+
+
 def test_hallucinated_url_not_in_candidates_is_rejected(monkeypatch, tmp_path):
     """A URL the model invents (not one of the page's own links) is a sign
     of hallucination, not a real find - never trust it."""
