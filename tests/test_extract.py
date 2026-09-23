@@ -97,6 +97,18 @@ def test_apptegy_rendered_directory():
     }
 
 
+def test_obscure_email_attrs_directory():
+    """Blackbaud/myschoolcdn-style directory: no mailto: href or visible
+    email text at all - the address is split across data-username/
+    data-domain attributes on an empty <a href="#">, reassembled by JS.
+    Also covers a first-name/last-name split into separate elements."""
+    got = by_email(extract_contacts(load("obscure_email_attrs.html"), "https://example.org/faculty"))
+    assert got == {
+        "sasha_klein@example.org": ("Sasha Klein", "Upper School Science", ""),
+        "devon_park@example.org": ("Devon Park", "Middle School Counselor", ""),
+    }
+
+
 def test_crooked_oak_directory():
     """Real-world regression fixture: a CMS layout not covered elsewhere
     (grid of per-person contact-info boxes, no table/card class names).

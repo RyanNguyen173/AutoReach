@@ -84,6 +84,13 @@ def _prepare(html: str) -> BeautifulSoup:
         el.replace_with(decode_cfemail(el["data-cfemail"]))
     for a in soup.select('a[href*="/cdn-cgi/l/email-protection#"]'):
         a["href"] = "mailto:" + decode_cfemail(a["href"].split("#", 1)[1])
+    # Blackbaud/myschoolcdn-style obfuscation: an empty <a href="#"> with the
+    # address split across data-username/data-domain attributes, rebuilt
+    # client-side by JavaScript.
+    for a in soup.select("a[data-username][data-domain]"):
+        username, domain = a.get("data-username"), a.get("data-domain")
+        if username and domain:
+            a["href"] = f"mailto:{username}@{domain}"
     return soup
 
 
@@ -232,6 +239,27 @@ def _by_class(container: Tag, keys: tuple[str, ...], skip: set[int]) -> Tag | No
     return None
 
 
+def _first_last_name(container: Tag, skip: set[int]) -> tuple[list[Tag], str] | None:
+    """Some CMSes split a person's name into separate first-name/last-name
+    elements. NAME_KEYS' generic "name" class-substring match would grab
+    "first-name" alone (it contains "name") and never see the last name,
+    which then leaks into a later field - so this is checked first."""
+    first = next(
+        (el for el in container.find_all(True)
+         if id(el) not in skip and "first-name" in (el.get("class") or [])),
+        None,
+    )
+    last = next(
+        (el for el in container.find_all(True)
+         if id(el) not in skip and "last-name" in (el.get("class") or [])),
+        None,
+    )
+    if first is None or last is None:
+        return None
+    text = " ".join(t for t in (_text(first), _text(last)) if t)
+    return ([first, last], text) if text else None
+
+
 def _fields(container: Tag, node: Tag | None = None) -> tuple[str, str, str]:
     if container.name == "tr" and (row := _from_row(container)):
         return row
@@ -242,11 +270,23 @@ def _fields(container: Tag, node: Tag | None = None) -> tuple[str, str, str]:
     # signal than scanning headings - those can combine "Name, Title" in one
     # element and accidentally look like a name themselves.
     name_el = node if isinstance(node, Tag) and node.name == "a" and looks_like_name(_text(node)) else None
-    if name_el is None:
-        name_el = _by_class(container, NAME_KEYS, used)
     name = _text(name_el) if name_el is not None else ""
+    if name_el is not None:
+        used.update(id(e) for e in [name_el, *name_el.find_all(True)])
+    split_name = None if name else _first_last_name(container, used)
+    name_lines: list[str] = []
+    if split_name is not None:
+        split_els, name = split_name
+        used.update(id(e) for e in split_els)
+        # Each half's own text (e.g. "Sasha", "Klein") is a separate line in
+        # the raw per-line scan below, distinct from the joined "name" - both
+        # need excluding there or the surname leaks into a later field.
+        name_lines = [_text(e) for e in split_els]
+    elif name_el is None:
+        name_el = _by_class(container, NAME_KEYS, used)
+        name = _text(name_el) if name_el is not None else ""
     heading_lines: list[str] = []
-    if name_el is None or not looks_like_name(name):
+    if not looks_like_name(name):
         name_el = next(
             (h for h in container.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "strong", "b"])
              if (lines := _heading_lines(h)) and looks_like_name(lines[0])),
@@ -269,7 +309,7 @@ def _fields(container: Tag, node: Tag | None = None) -> tuple[str, str, str]:
     # steal the second.
     if not title and len(heading_lines) > 1:
         title = " ".join(heading_lines[1:])
-    taken = {name, title, dept, *heading_lines}
+    taken = {name, title, dept, *heading_lines, *name_lines}
     lines = [
         cleaned for raw in container.get_text("\n").split("\n")
         # Strip stray separator punctuation left behind when the name and
