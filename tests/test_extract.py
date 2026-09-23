@@ -97,6 +97,36 @@ def test_apptegy_rendered_directory():
     }
 
 
+def test_crooked_oak_directory():
+    """Real-world regression fixture: a CMS layout not covered elsewhere
+    (grid of per-person contact-info boxes, no table/card class names).
+    Names, emails etc. are fictionalized; the markup shape is real."""
+    got = by_email(extract_contacts(load("crooked_oak_staff.html"), "https://www.crookedoak.org/staff"))
+    assert len(got) == 20
+    assert got == {
+        "aalder@example.org": ("Ava Alder", "COHS Teacher", "Crooked Oak High School"),
+        "bbrix@example.org": ("Ben Brix", "COMS Teacher", "Crooked Oak Middle School"),
+        "ccarver@example.org": ("Cora Carver", "COHS Teacher", "Crooked Oak High School"),
+        "office@example.org": ("Dax Doyle", "COE Reading Specialist", "Central Oak Elementary"),
+        "eember@example.org": ("Ella Ember", "2nd Grade Teacher", "Central Oak Elementary"),
+        "ffrost@example.org": ("Finn Frost", "COE Para-Professional", "Central Oak Elementary"),
+        "ggable@example.org": ("Gwen Gable", "5th Grade Teacher", "Central Oak Elementary"),
+        "hhollis@example.org": ("Huck Hollis", "Child Nutrition Director", "Crooked Oak Administration"),
+        "iivers@example.org": ("Ivy Ivers", "2nd Grade Teacher", "Central Oak Elementary"),
+        "jjuno@example.org": ("Jax Juno", "Math Teacher", "Crooked Oak Middle School"),
+        "kknox@example.org": ("Kira Knox", "4th Grade Teacher", "Central Oak Elementary"),
+        "llark@example.org": ("Leo Lark", "Special Services Secretary", "Central Oak Elementary"),
+        "mmoss@example.org": ("Mira Moss", "COHS Counselor", "Crooked Oak High School"),
+        "nnoor@example.org": ("Nash Noor", "High School Science", "Crooked Oak High School"),
+        "oosei@example.org": ("Opal Osei", "Athletics Director", "Crooked Oak Administration"),
+        "ppryce@example.org": ("Piper Pryce", "5th Grade Teacher", "Central Oak Elementary"),
+        "qquill@example.org": ("Quinn Quill", "District Registrar", "Crooked Oak Administration"),
+        "rreyes@example.org": ("Ren Reyes", "English Teacher", "Crooked Oak Middle School"),
+        "sstark@example.org": ("Sana Stark", "CareerTech Teacher", "Crooked Oak High School"),
+        "ttanaka@example.org": ("Theo Tanaka", "COE Counselor", "Central Oak Elementary"),
+    }
+
+
 def test_js_page_has_nothing_without_rendering():
     assert extract_contacts(load("js_rendered.html")) == []
 
