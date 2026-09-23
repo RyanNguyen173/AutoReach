@@ -1,0 +1,29 @@
+<!--
+Synthetic fixture, modeled on a real bug found on the University of Oklahoma's
+College of Education faculty page (an AEM/day.com-style CMS): a copy-paste
+artifact splits one person's mailto link across two adjacent <a> tags with
+the identical href, e.g. <a href="mailto:x">j</a><a href="mailto:x">doe@ex.org</a>.
+The second fragment's *visible text* happens to look like a different, valid
+email address, even though both anchors point at the same address. People
+and addresses are fictional.
+-->
+<html><body>
+<div class="parsys_column">
+  <div class="card card-profile">
+    <div class="card-body">
+      <h4 class="title"><b>Jordan Ellison<br>Associate Professor<br></b></h4>
+      <p><b>Department:</b> Curriculum Studies<br>
+      <b>Email:</b> <a href="mailto:jellison@example.org">j</a><a href="mailto:jellison@example.org">ellison@example.org</a><br>
+      <b>Office:</b> Main Hall 200<br></p>
+    </div>
+  </div>
+  <div class="card card-profile">
+    <div class="card-body">
+      <h4 class="title"><b>Priya Nair<br>Professor<br></b></h4>
+      <p><b>Department:</b> Educational Psychology<br>
+      <b>Email:</b> <a href="mailto:pnair@example.org">pnair@example.org</a><br>
+      <b>Office:</b> Main Hall 210<br></p>
+    </div>
+  </div>
+</div>
+</body></html>

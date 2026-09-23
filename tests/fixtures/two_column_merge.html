@@ -1,0 +1,31 @@
+<!--
+Synthetic fixture: two staff members side by side in a generic two-column
+layout wrapper - the same wrapper class this Finalsite site reuses for
+unrelated footer sections, which previously caused a person's title/dept to
+leak in from the *other* column. Ellis has a real link with an href; Baker
+has a name-shaped link with no href at all (common on real Westmoore pages)
+so she can never become her own contact, but her text must not leak into
+Ellis's row either. Names and UUIDs are fictional.
+-->
+<html><body>
+<div class="fsElement fsLayout fsTwoColumnLayout fsStyleAutoclear">
+  <div class="fsDiv fsStyleColumn fsStyleColumn-1">
+    <div><a href="https://example.org/fs/form-manager/view/55555555-5555-5555-5555-555555555555">Dana Ellis</a></div>
+    <div><div>Math</div></div>
+  </div>
+  <div class="fsDiv fsStyleColumn fsStyleColumn-2 fsStyleColumn-last">
+    <div><a target="_blank">Priya Baker</a></div>
+    <div>Vocal Music</div>
+  </div>
+</div>
+<div class="fsElement fsLayout fsTwoColumnLayout fsStyleAutoclear">
+  <div class="fsDiv fsStyleColumn fsStyleColumn-1">
+    <div><a href="https://example.org/fs/form-manager/view/66666666-6666-6666-6666-666666666666">Omar Reyes</a></div>
+    <div><div>Science</div></div>
+  </div>
+  <div class="fsDiv fsStyleColumn fsStyleColumn-2 fsStyleColumn-last">
+    <div><a target="_blank">Nina Alvarez</a></div>
+    <div>Robotics</div>
+  </div>
+</div>
+</body></html>
