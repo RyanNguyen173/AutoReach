@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 import httpx
@@ -25,6 +26,23 @@ log = logging.getLogger("autoreach")
 
 DEFAULT_MODEL = "gemini-2.0-flash"
 _API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+# Google's free tier caps Gemini at 15 requests/minute. A batch run calls
+# this once per site with no other pacing, so without a delay here it burns
+# through the quota fast and every call after that fails as a 429 - silently,
+# since a failed AI call is treated the same as "the model found nothing".
+# AUTOREACH_AI_MIN_INTERVAL overrides this for a paid key with a higher limit.
+_DEFAULT_MIN_INTERVAL = 4.5
+_last_call = 0.0
+
+
+def _throttle() -> None:
+    global _last_call
+    min_interval = float(os.environ.get("AUTOREACH_AI_MIN_INTERVAL", _DEFAULT_MIN_INTERVAL))
+    elapsed = time.monotonic() - _last_call
+    if elapsed < min_interval:
+        time.sleep(min_interval - elapsed)
+    _last_call = time.monotonic()
 
 _PROMPT = """You are helping find a staff/faculty directory page on a school or \
 company website. Below is a numbered list of links found on the homepage, as \
@@ -95,6 +113,7 @@ def find_directory_via_ai(
 
     result = None
     try:
+        _throttle()
         resp = httpx.post(
             _API_URL.format(model=model),
             params={"key": api_key},

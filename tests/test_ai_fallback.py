@@ -1,6 +1,17 @@
+import time
+
 import httpx
+import pytest
 
 from autoreach import ai_fallback
+
+
+@pytest.fixture(autouse=True)
+def _no_throttle_by_default(monkeypatch):
+    """Every test except the throttling one itself should run at full speed,
+    and never see rate-limit state left over from an earlier test."""
+    monkeypatch.setenv("AUTOREACH_AI_MIN_INTERVAL", "0")
+    monkeypatch.setattr(ai_fallback, "_last_call", 0.0)
 
 HOMEPAGE = """
 <html><body><nav>
@@ -109,6 +120,19 @@ def test_result_is_cached_across_calls(monkeypatch, tmp_path):
 
     assert first == second == "https://example.org/connect"
     assert len(calls) == 1  # second call served from cache
+
+
+def test_calls_are_throttled_to_avoid_the_free_tier_rate_limit(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTOREACH_AI_MIN_INTERVAL", "0.2")
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _fake_response("NONE"))
+
+    homepage_2 = HOMEPAGE.replace("about", "about2")  # different cache key
+    start = time.monotonic()
+    ai_fallback.find_directory_via_ai(HOMEPAGE, "https://example.org", api_key="fake-key", cache_dir=tmp_path)
+    ai_fallback.find_directory_via_ai(homepage_2, "https://example.org", api_key="fake-key", cache_dir=tmp_path)
+    elapsed = time.monotonic() - start
+
+    assert elapsed >= 0.2
 
 
 def test_combined_find_directory_prefers_heuristic_over_ai(monkeypatch, tmp_path):
