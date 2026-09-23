@@ -10,7 +10,11 @@ NAME_KEYS = ("name",)
 TITLE_KEYS = ("title", "position", "role", "job")
 DEPT_KEYS = ("department", "dept", "location", "school", "building", "subject", "group")
 
-_LABEL_RE = re.compile(r"^(e-?mail|phone|tel|fax|website|contact|send (an )?email|ext\.?)\b\s*:?\s*$", re.I)
+_LABEL_RE = re.compile(
+    r"^(e-?mail|phone|tel|fax|website|contact|send (an )?email|ext\.?"
+    r"|dept\.?|department|program area|office)\b\s*:?\s*$",
+    re.I,
+)
 _PHONE_RE = re.compile(r"^[\s\d().+\-x:]*\d{3}[\s\d().+\-x:]*$", re.I)
 # Every word capitalized, like a real personal name - excludes phrases such
 # as "Click here" or generic sentence fragments that would otherwise pass a
@@ -96,23 +100,46 @@ def _contact_nodes(soup: BeautifulSoup, base_url: str) -> list[tuple[str, str, T
             elif FORM_LINK_RE.search(href):
                 found.setdefault(("form", urljoin(base_url, href)), el)
         elif isinstance(el, NavigableString) and not isinstance(el, Comment):
+            # Text inside a *mailto* <a> is handled above via its href,
+            # which is authoritative - some CMSes split one mailto link's
+            # display text across adjacent <a> tags, and a fragment of it
+            # can coincidentally look like a different (wrong) email
+            # address. Text inside a non-mailto link (e.g. a "view profile"
+            # wrapper) is still a legitimate place for a plain-text email.
+            parent_a = el.find_parent("a")
+            if parent_a is not None and (parent_a.get("href") or "").lower().startswith("mailto:"):
+                continue
             for email in find_emails(str(el)):
                 found.setdefault(("email", email), el.parent)
     return [(kind, value, node) for (kind, value), node in found.items()]
 
 
 def _contacts_in(el: Tag, counts: dict[int, set[str]]) -> set[str]:
-    """Every email address and contact-form URL found anywhere inside el."""
+    """Every email address and contact-form URL found in or on el itself."""
     key = id(el)
     if key not in counts:
-        identifiers = set(find_emails(el.get_text(" ")))
-        for a in el.find_all("a", href=True):
+        links = el.find_all("a", href=True)
+        if el.name == "a" and el.get("href"):
+            links = [el, *links]
+        identifiers = set()
+        for a in links:
             href = a["href"]
             if href.lower().startswith("mailto:"):
                 if email := clean(href):
                     identifiers.add(email)
             elif FORM_LINK_RE.search(href):
                 identifiers.add(href)
+        # Plain-text emails, skipping text inside a *mailto* link - its href,
+        # not its visible text, is authoritative for its own address (some
+        # CMSes split one mailto's display text across adjacent <a> tags,
+        # and a fragment of it can coincidentally look like a different
+        # address). Text inside a non-mailto link is still fair game.
+        if not (el.name == "a" and (el.get("href") or "").lower().startswith("mailto:")):
+            for s in el.find_all(string=True):
+                parent_a = s.find_parent("a")
+                if parent_a is not None and (parent_a.get("href") or "").lower().startswith("mailto:"):
+                    continue
+                identifiers.update(find_emails(str(s)))
         counts[key] = identifiers
     return counts[key]
 
@@ -122,12 +149,18 @@ def _signature(el: Tag) -> tuple[str, tuple[str, ...]]:
 
 
 def _is_repeated(el: Tag, counts: dict[int, set[str]]) -> bool:
-    """True when a sibling of the same kind also holds an email, i.e. el is one entry in a list."""
+    """True when a sibling of the same kind holds a *different* email/form URL,
+    i.e. el is one entry in a list of several people. A sibling that repeats
+    the exact same identifier isn't another person - some CMSes split one
+    mailto link across two adjacent <a> tags (a copy-paste artifact), which
+    would otherwise look like a two-person list and stop the container from
+    growing to the real card/row."""
     if el.parent is None:
         return False
+    own = _contacts_in(el, counts)
     sig = _signature(el)
     return any(
-        sib is not el and isinstance(sib, Tag) and _signature(sib) == sig and _contacts_in(sib, counts)
+        sib is not el and isinstance(sib, Tag) and _signature(sib) == sig and _contacts_in(sib, counts) - own
         for sib in el.parent.children
     )
 
@@ -164,6 +197,25 @@ def _text(el: Tag | None) -> str:
     return " ".join(el.get_text(" ").split()) if el else ""
 
 
+def _heading_lines(el: Tag) -> list[str]:
+    """Text split at each <br>, e.g. the separate name/title/role lines of a
+    heading that combines "Name<br>Title<br>Second role line<br>" with no
+    separate element for each - matching the whole heading's text against
+    the name pattern would fail once a title/role line makes it too long or
+    brings in lowercase connector words ("Associate Dean of ...")."""
+    lines, current = [], []
+    for descendant in el.descendants:
+        if isinstance(descendant, Tag) and descendant.name == "br":
+            if line := " ".join(" ".join(current).split()):
+                lines.append(line)
+            current = []
+        elif isinstance(descendant, NavigableString) and not isinstance(descendant, Comment):
+            current.append(str(descendant))
+    if line := " ".join(" ".join(current).split()):
+        lines.append(line)
+    return lines
+
+
 def looks_like_name(text: str) -> bool:
     return len(text) <= 60 and bool(_NAME_RE.match(text)) and not find_emails(text)
 
@@ -192,12 +244,17 @@ def _fields(container: Tag, node: Tag | None = None) -> tuple[str, str, str]:
     name_el = node if isinstance(node, Tag) and node.name == "a" and looks_like_name(_text(node)) else None
     if name_el is None:
         name_el = _by_class(container, NAME_KEYS, used)
-    if name_el is None or not looks_like_name(_text(name_el)):
+    name = _text(name_el) if name_el is not None else ""
+    heading_lines: list[str] = []
+    if name_el is None or not looks_like_name(name):
         name_el = next(
             (h for h in container.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "strong", "b"])
-             if looks_like_name(_text(h))),
+             if (lines := _heading_lines(h)) and looks_like_name(lines[0])),
             None,
         )
+        if name_el is not None:
+            heading_lines = _heading_lines(name_el)
+            name = heading_lines[0]
     if name_el is not None:
         used.update(id(e) for e in [name_el, *name_el.find_all(True)])
     title_el = _by_class(container, TITLE_KEYS, used)
@@ -205,8 +262,14 @@ def _fields(container: Tag, node: Tag | None = None) -> tuple[str, str, str]:
         used.update(id(e) for e in [title_el, *title_el.find_all(True)])
     dept_el = _by_class(container, DEPT_KEYS, used)
 
-    name, title, dept = _text(name_el), _text(title_el), _text(dept_el)
-    taken = {name, title, dept}
+    title, dept = _text(title_el), _text(dept_el)
+    # A multi-line heading's title/role lines (everything after the name)
+    # belong together as the title - otherwise the generic line-fallback
+    # below would only grab the first of them and let the department field
+    # steal the second.
+    if not title and len(heading_lines) > 1:
+        title = " ".join(heading_lines[1:])
+    taken = {name, title, dept, *heading_lines}
     lines = [
         cleaned for raw in container.get_text("\n").split("\n")
         # Strip stray separator punctuation left behind when the name and

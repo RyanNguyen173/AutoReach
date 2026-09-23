@@ -127,6 +127,28 @@ def test_crooked_oak_directory():
     }
 
 
+def test_split_mailto_link_is_one_person():
+    """A CMS artifact splits one mailto link's display text across two
+    adjacent <a> tags with the identical href. The second fragment's visible
+    text can coincidentally look like a different, valid email - it isn't."""
+    got = by_email(extract_contacts(load("split_mailto_link.html"), "https://example.org/faculty"))
+    assert got == {
+        "jellison@example.org": ("Jordan Ellison", "Associate Professor", "Curriculum Studies"),
+        "pnair@example.org": ("Priya Nair", "Professor", "Educational Psychology"),
+    }
+
+
+def test_multiline_heading_keeps_name_title_and_department_separate():
+    """A heading combines the name and two title/role lines with no
+    separate element for each (Name<br>Title<br>Second role line)."""
+    got = by_email(extract_contacts(load("multiline_heading.html"), "https://example.org/faculty"))
+    assert got == {
+        "mvasquez@example.org": (
+            "Morgan Vasquez", "Associate Professor Associate Dean of Graduate Studies", "Learning Sciences",
+        ),
+    }
+
+
 def test_js_page_has_nothing_without_rendering():
     assert extract_contacts(load("js_rendered.html")) == []
 

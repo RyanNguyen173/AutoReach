@@ -1,0 +1,20 @@
+<!--
+Synthetic fixture, modeled on a real bug found on the University of Oklahoma's
+College of Education faculty page: some cards put the person's name and two
+or more title/role lines inside one heading, separated only by <br> (no
+separate element per line), e.g. "<h4>Name<br>Title<br>Second role line</h4>".
+Matching the whole heading's text against the name pattern fails once it's
+long or brings in lowercase connector words ("Associate Dean of ..."), even
+though the name itself, on the first line, is unambiguous. People and
+addresses are fictional.
+-->
+<html><body>
+<div class="card card-profile">
+  <div class="card-body">
+    <h4 class="title"><b>Morgan Vasquez<br>Associate Professor<br>Associate Dean of Graduate Studies</b></h4>
+    <p><b>Department:</b> Learning Sciences<br>
+    <b>Email:</b> <a href="mailto:mvasquez@example.org">mvasquez@example.org</a><br>
+    <b>Office:</b> Main Hall 300<br></p>
+  </div>
+</div>
+</body></html>
