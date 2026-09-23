@@ -77,14 +77,20 @@ class Fetcher:
 
     def _render(self, url: str) -> str:
         try:
+            from playwright.sync_api import Error as PlaywrightError
             from playwright.sync_api import sync_playwright
         except ImportError as e:
             raise RuntimeError('Rendering needs Playwright: pip install "autoreach[render]"') from e
-        with sync_playwright() as p:
-            browser = p.chromium.launch(executable_path=os.environ.get("AUTOREACH_CHROMIUM") or None)
-            try:
-                page = browser.new_page(user_agent=USER_AGENT)
-                page.goto(url, wait_until="networkidle")
-                return page.content()
-            finally:
-                browser.close()
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(executable_path=os.environ.get("AUTOREACH_CHROMIUM") or None)
+                try:
+                    page = browser.new_page(user_agent=USER_AGENT)
+                    page.goto(url, wait_until="networkidle")
+                    return page.content()
+                finally:
+                    browser.close()
+        except PlaywrightError as e:
+            # A hung/slow/unreachable site shouldn't take the whole batch
+            # down - let callers handle this the same as an HTTP error.
+            raise RuntimeError(str(e).splitlines()[0]) from e
