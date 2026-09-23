@@ -17,6 +17,7 @@ from .forms import parse_form
 from .models import Contact
 from .role import filter_by_role
 from .state_directory import parse_state_directory
+from .targets import load_targets, targets_to_domains
 
 app = typer.Typer(help="AutoReach: find contacts in staff directories.", no_args_is_help=True)
 
@@ -152,6 +153,18 @@ def import_state_directory_cmd(
         writer.writerows(c.row() for c in contacts)
 
     typer.echo(f"Read {source}, wrote {len(contacts)} contact(s) with an email to {output}.", err=True)
+
+
+@app.command("targets-to-domains")
+def targets_to_domains_cmd(
+    source: Path = typer.Argument(..., help="A targets CSV (columns: name, homepage_url, and optionally district, city, county, source)."),
+    output: Path = typer.Option(..., "-o", "--output", help="domains.txt file to write, ready for `batch`."),
+) -> None:
+    """Turn a curated list of organizations into the domains.txt format
+    `batch` reads, so a target list and a batch run stay separate steps."""
+    targets = load_targets(source)
+    output.write_text(targets_to_domains(targets), encoding="utf-8")
+    typer.echo(f"Read {source}, wrote {len(targets)} homepage(s) to {output}.", err=True)
 
 
 @app.command("find-directory")
