@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx
 import typer
 
+from .ai_fallback import find_directory_via_ai
 from .crawl import crawl_directory, dedupe, describe_fetch_error, run_batch
 from .extract import extract_contacts
 from .fetch import Fetcher, RobotsDisallowed
@@ -163,6 +164,10 @@ def find_directory_cmd(
         base_url = source
 
     url = find_directory_link(html, base_url)
+    if url is None:
+        url = find_directory_via_ai(html, base_url)
+        if url is not None:
+            typer.echo("(heuristic found nothing; used the AI fallback)", err=True)
     if url is None:
         typer.echo("No staff directory link found on that page.", err=True)
         raise typer.Exit(code=1)

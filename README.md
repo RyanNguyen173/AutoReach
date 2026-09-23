@@ -1,10 +1,11 @@
 # AutoReach
 A website that matches you to anything and makes tailored cold emails showing your purpose.
 
-## Status: Phase 1 (contact extractor) + early Phase 2 (directory finder)
+## Status: Phase 1 (contact extractor) + Phase 2 (directory finder)
 Give it a staff directory page and it returns a CSV of names, titles, departments and emails.
-Give it a homepage instead and it can find the staff directory link for you.
-It uses no AI and has no web interface yet.
+Give it a homepage instead and it can find the staff directory link for you - heuristically
+for free, or with an AI assist on messier pages if you set up a Gemini API key. It has no
+web interface yet.
 
 ## Setup
 ```bash
@@ -14,6 +15,17 @@ pip install -e ".[dev]"
 # Optional, for directories that load their staff list with JavaScript:
 pip install -e ".[render]" && playwright install chromium
 ```
+
+### Optional: AI fallback for `find-directory` / `batch`
+`find-directory`'s heuristic is deliberately conservative - on a page where nothing looks
+confidently like a staff directory, it returns nothing rather than guess wrong. To have it
+ask a cheap model (Gemini) as a fallback in that case, set an API key:
+```bash
+export GEMINI_API_KEY="your-key-here"
+```
+With no key set, this is a no-op - everything works exactly as before, just without the
+fallback. Responses are cached in `.cache/ai/`, so re-running the same page never costs a
+second API call. Optionally set `GEMINI_MODEL` to use a different model (default: `gemini-2.0-flash`).
 
 ## Usage
 ```bash

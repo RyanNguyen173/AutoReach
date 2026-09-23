@@ -43,11 +43,10 @@ def _score(text: str, path: str) -> int:
     return score
 
 
-def find_directory_link(html: str, base_url: str) -> str | None:
-    """The single most likely staff-directory URL linked from this homepage,
-    or None if nothing looks like one. Prefers a strong text match ("Staff
-    Directory") or an on-the-nose URL path (/staff, /directory) over a bare
-    "Contact" or "Team" link, which are common false positives."""
+def candidate_links(html: str, base_url: str) -> list[tuple[str, str]]:
+    """Every same-origin, non-asset link on the page as (visible text, URL) -
+    the pool find_directory_link scores, and what the AI fallback picks from
+    when the heuristic can't decide."""
     soup = BeautifulSoup(html, "lxml")
     host = urlparse(base_url).netloc
     # A saved local file has no real origin to compare against - relative
@@ -55,8 +54,8 @@ def find_directory_link(html: str, base_url: str) -> str | None:
     # filtering would reject every one of them. Only enforce it when
     # base_url is an actual URL.
     check_origin = bool(host)
-    best_url, best_score = None, 0
     seen: set[str] = set()
+    links = []
 
     for a in soup.find_all("a", href=True):
         url = urldefrag(urljoin(base_url, a["href"]))[0]
@@ -67,10 +66,19 @@ def find_directory_link(html: str, base_url: str) -> str | None:
         if parsed.path.lower().endswith(_SKIP_EXTENSIONS):
             continue
         seen.add(url)
+        links.append((a.get_text(" ", strip=True), url))
 
-        text = a.get_text(" ", strip=True)
-        score = _score(text, parsed.path)
+    return links
+
+
+def find_directory_link(html: str, base_url: str) -> str | None:
+    """The single most likely staff-directory URL linked from this homepage,
+    or None if nothing looks like one. Prefers a strong text match ("Staff
+    Directory") or an on-the-nose URL path (/staff, /directory) over a bare
+    "Contact" or "Team" link, which are common false positives."""
+    best_url, best_score = None, 0
+    for text, url in candidate_links(html, base_url):
+        score = _score(text, urlparse(url).path)
         if score > best_score:
             best_url, best_score = url, score
-
     return best_url if best_score >= 5 else None

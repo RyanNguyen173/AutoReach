@@ -4,3 +4,4 @@ __pycache__/
 *.egg-info/
 *.csv
 .pytest_cache/
+.env

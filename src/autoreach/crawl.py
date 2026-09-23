@@ -8,6 +8,7 @@ from typing import Protocol
 
 import httpx
 
+from .ai_fallback import find_directory_via_ai
 from .extract import extract_contacts, find_page_links
 from .fetch import Fetcher, RobotsDisallowed
 from .find_directory import find_directory_link
@@ -96,6 +97,8 @@ def run_batch(
             continue
 
         result.directory_url = find_directory_link(homepage_html, site)
+        if result.directory_url is None:
+            result.directory_url = find_directory_via_ai(homepage_html, site)
         if result.directory_url is None:
             results.append(result)
             continue
