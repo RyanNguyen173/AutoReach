@@ -14,9 +14,9 @@ from .extract import extract_contacts
 from .fetch import Fetcher, RobotsDisallowed
 from .find_directory import find_directory_link
 from .forms import parse_form
-from .models import Contact
+from .models import Contact, Target
 from .role import filter_by_role
-from .state_directory import parse_state_directory
+from .state_directory import parse_district_targets, parse_state_directory
 from .targets import load_targets, targets_to_domains
 
 app = typer.Typer(help="AutoReach: find contacts in staff directories.", no_args_is_help=True)
@@ -153,6 +153,24 @@ def import_state_directory_cmd(
         writer.writerows(c.row() for c in contacts)
 
     typer.echo(f"Read {source}, wrote {len(contacts)} contact(s) with an email to {output}.", err=True)
+
+
+@app.command("import-district-targets")
+def import_district_targets_cmd(
+    source: Path = typer.Argument(..., help="A state education department's district directory .xlsx file (must have a 'Web Site URL' column)."),
+    output: Path = typer.Option(..., "-o", "--output", help="Targets CSV to write."),
+) -> None:
+    """Read a state-published district directory spreadsheet into a
+    targets CSV, using each district's own listed website - no scraping
+    or guessing needed. Feed the result to targets-to-domains, then batch."""
+    targets = parse_district_targets(source, source=str(source))
+
+    with output.open("w", newline="", encoding="utf-8") as out:
+        writer = csv.DictWriter(out, fieldnames=Target.columns())
+        writer.writeheader()
+        writer.writerows(t.row() for t in targets)
+
+    typer.echo(f"Read {source}, wrote {len(targets)} target(s) with a website to {output}.", err=True)
 
 
 @app.command("targets-to-domains")

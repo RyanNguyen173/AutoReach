@@ -12,10 +12,13 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from .emails import clean
-from .models import Contact
+from .models import Contact, Target
 
 SCHOOL_HEADER = "school"
 DISTRICT_HEADER = "district"
+WEBSITE_HEADER = "web site"
+COUNTY_HEADER = "county"
+CITY_HEADER = "physical city"
 
 _EMAIL_HEADER_RE = re.compile(r"^(.*?)(?:'s)?\s+email$")
 
@@ -72,3 +75,43 @@ def parse_state_directory(path: Path, source_url: str = "") -> list[Contact]:
             source_url=source_url,
         ))
     return contacts
+
+
+def _normalize_url(url: str) -> str:
+    url = url.strip()
+    if url and not re.match(r"^https?://", url, re.I):
+        url = f"http://{url}"
+    return url
+
+
+def parse_district_targets(path: Path, source: str = "") -> list[Target]:
+    """Read an OSDE district directory .xlsx into one Target per district
+    that has a website URL - the input to `batch`, not a Contact export."""
+    wb = load_workbook(path, data_only=True)
+    ws = wb.worksheets[0]
+
+    header_row, headers = _find_header_row(ws)
+    website_col = _column(headers, WEBSITE_HEADER)
+    if website_col is None:
+        raise ValueError(f"No {WEBSITE_HEADER!r} column found in {path}.")
+    district_col = _column(headers, DISTRICT_HEADER)
+    county_col = _column(headers, COUNTY_HEADER)
+    city_col = _column(headers, CITY_HEADER)
+
+    targets = []
+    for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+        url = str(row[website_col]).strip() if row[website_col] else ""
+        if not url:
+            continue
+        name = str(row[district_col]).strip() if district_col is not None and row[district_col] else ""
+        county = str(row[county_col]).strip() if county_col is not None and row[county_col] else ""
+        city = str(row[city_col]).strip() if city_col is not None and row[city_col] else ""
+        targets.append(Target(
+            name=name,
+            homepage_url=_normalize_url(url),
+            district=name,
+            city=city,
+            county=county,
+            source=source,
+        ))
+    return targets
