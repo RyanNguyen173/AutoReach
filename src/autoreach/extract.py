@@ -227,6 +227,37 @@ def looks_like_name(text: str) -> bool:
     return len(text) <= 60 and bool(_NAME_RE.match(text)) and not find_emails(text)
 
 
+def _trailing_text(node: Tag) -> str:
+    """Text immediately following node's own link within a shared parent,
+    up to the next <br> or the next person's link - for when several people
+    share one heading with no per-person wrapper, each just followed by
+    their own short ", Title" text, e.g.:
+    <h5>Office Name<br><a>Person A</a>, Title A<br><a>Person B</a>, Title B</h5>
+    _container() correctly refuses to grow into the shared heading (it holds
+    more than one person's contact link), which otherwise leaves nothing
+    for _fields() to find a title in beyond the bare name."""
+    start = node
+    # A wrapper like <strong> directly around just this one link is part of
+    # this person's own name, not a separate element - widen to it so its
+    # own following siblings (the title text) are what gets walked.
+    parent = start.parent
+    if parent is not None and parent.name in ("strong", "b", "em") and len(parent.find_all("a", href=True)) == 1:
+        start = parent
+    parts = []
+    for sib in start.next_siblings:
+        if isinstance(sib, Tag):
+            if sib.name == "br":
+                if parts:
+                    break
+                continue
+            if sib.name == "a" and sib.get("href"):
+                break
+            parts.append(sib.get_text(" "))
+        elif isinstance(sib, NavigableString) and not isinstance(sib, Comment):
+            parts.append(str(sib))
+    return _LEADING_PUNCT_RE.sub("", " ".join(" ".join(parts).split()))
+
+
 def _by_class(container: Tag, keys: tuple[str, ...], skip: set[int]) -> Tag | None:
     for el in container.find_all(True):
         if id(el) in skip:
@@ -329,7 +360,17 @@ def _fields(container: Tag, node: Tag | None = None) -> tuple[str, str, str]:
         idx = next((i for i, line in enumerate(lines) if not any(c.isdigit() for c in line)), 0)
         title = lines.pop(idx)
     if not dept and lines:
-        dept = lines.pop(0)
+        # Unlike title just above, there's no fallback line to settle for
+        # here - a stray office/phone line (e.g. "WHS Junior Office (405)
+        # 735-4811") left over once title has claimed the one clean line is
+        # noise, not a department; better left blank than kept as-is.
+        idx = next((i for i, line in enumerate(lines) if not any(c.isdigit() for c in line)), None)
+        if idx is not None:
+            dept = lines.pop(idx)
+    if not title and not dept and node is not None:
+        trailing = _trailing_text(node)
+        if trailing and not find_emails(trailing) and not _LABEL_RE.match(trailing) and not _PHONE_RE.match(trailing):
+            title = trailing
     return name, title, dept
 
 

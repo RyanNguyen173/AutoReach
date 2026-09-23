@@ -84,6 +84,26 @@ def test_generic_two_column_layout_doesnt_merge_people():
     }
 
 
+def test_two_people_sharing_one_heading_each_keep_their_own_title():
+    """Real-world regression: two people can share one heading with no
+    per-person wrapper, each followed inline by their own short title.
+    Also covers a stray office/phone line elsewhere in the same heading
+    landing in department once title has claimed the one clean line -
+    it should be left blank instead of kept as noise."""
+    got = by_form_url(extract_contacts(load("shared_heading_two_people.html"), "https://example.org/staff"))
+    assert got == {
+        "https://example.org/fs/form-manager/view/11111111-1111-1111-1111-111111111111": (
+            "Robin Ashford", "Freshman Principal", "",
+        ),
+        "https://example.org/fs/form-manager/view/22222222-2222-2222-2222-222222222222": (
+            "Casey Marlow", "Freshman Principal", "",
+        ),
+        "https://example.org/fs/form-manager/view/33333333-3333-3333-3333-333333333333": (
+            "Devon Larkin", "Junior Principal", "",
+        ),
+    }
+
+
 def test_site_wide_utility_form_links_are_dropped():
     contacts = extract_contacts(load("utility_form_links.html"))
     assert contacts == []

@@ -1,0 +1,20 @@
+<!--
+Synthetic fixture, modeled on a real bug found on Westmoore HS's staff page
+(Finalsite): two people can share one heading with no per-person wrapper,
+each just followed inline by their own short ", Title" text, e.g.
+"<h5>Office<br><a>A</a>, Title A<br><a>B</a>, Title B</h5>". _container()
+correctly refuses to grow into the shared heading (it holds two different
+contact-form links), which left nothing for a title beyond the bare name -
+this checks the trailing-text fallback that recovers it. Also covers a
+stray office/phone line (elsewhere in the same heading) landing in
+department once title has claimed the one clean line - it should be left
+blank instead. People and addresses are fictional.
+-->
+<html><body>
+<h5>WHS Freshman Office (405) 555-4809<br />
+<strong><a href="https://example.org/fs/form-manager/view/11111111-1111-1111-1111-111111111111">Robin Ashford</a></strong>, Freshman Principal<br />
+<a href="https://example.org/fs/form-manager/view/22222222-2222-2222-2222-222222222222">Casey Marlow</a>, Freshman Principal</h5>
+
+<h5>WHS Junior Office (405) 555-4811<br />
+<strong><a href="https://example.org/fs/form-manager/view/33333333-3333-3333-3333-333333333333">Devon Larkin</a>,&nbsp;</strong>Junior Principal</h5>
+</body></html>
