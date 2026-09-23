@@ -1,8 +1,9 @@
 # AutoReach
 A website that matches you to anything and makes tailored cold emails showing your purpose.
 
-## Status: Phase 1 prototype (contact extractor)
+## Status: Phase 1 (contact extractor) + early Phase 2 (directory finder)
 Give it a staff directory page and it returns a CSV of names, titles, departments and emails.
+Give it a homepage instead and it can find the staff directory link for you.
 It uses no AI and has no web interface yet.
 
 ## Setup
@@ -31,6 +32,9 @@ autoreach extract saved_page.html -o contacts.csv
 # Some states publish an official directory of every school's principal, or
 # every district's superintendent, as a spreadsheet - no scraping needed
 autoreach import-state-directory directory.xlsx -o contacts.csv
+
+# Don't know the staff directory URL? Find it from the homepage first
+autoreach find-directory https://www.example-schools.org
 ```
 
 What it does:

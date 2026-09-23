@@ -9,6 +9,7 @@ import typer
 
 from .extract import extract_contacts, find_page_links
 from .fetch import Fetcher, RobotsDisallowed
+from .find_directory import find_directory_link
 from .forms import parse_form
 from .models import Contact
 from .state_directory import parse_state_directory
@@ -160,3 +161,37 @@ def import_state_directory_cmd(
         writer.writerows(c.row() for c in contacts)
 
     typer.echo(f"Read {source}, wrote {len(contacts)} contact(s) with an email to {output}.", err=True)
+
+
+@app.command("find-directory")
+def find_directory_cmd(
+    source: str = typer.Argument(..., help="A school/company homepage URL, or a saved .html file."),
+    render: bool = typer.Option(False, "--render", help="Load the page in a browser first, for JavaScript-built pages."),
+    delay: float = typer.Option(1.0, "--delay"),
+    no_cache: bool = typer.Option(False, "--no-cache"),
+    cache_dir: Path = typer.Option(Path(".cache/html"), "--cache-dir"),
+) -> None:
+    """Find the staff directory page linked from a homepage, so you don't
+    have to hunt for the URL yourself before running `extract`."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+
+    if Path(source).is_file():
+        html = Path(source).read_text(encoding="utf-8")
+        base_url = source
+    else:
+        fetcher = Fetcher(cache_dir=cache_dir, delay=delay, use_cache=not no_cache)
+        try:
+            html = fetcher.get_html(source, render=render)
+        except RobotsDisallowed as e:
+            typer.echo(f"Skipped: {e}", err=True)
+            raise typer.Exit(code=1) from None
+        except (httpx.HTTPError, RuntimeError) as e:
+            typer.echo(f"Skipped: {_describe_fetch_error(e, source, render)}", err=True)
+            raise typer.Exit(code=1) from None
+        base_url = source
+
+    url = find_directory_link(html, base_url)
+    if url is None:
+        typer.echo("No staff directory link found on that page.", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(url)
