@@ -7,7 +7,8 @@ from pathlib import Path
 import httpx
 import typer
 
-from .extract import extract_contacts, find_page_links
+from .crawl import crawl_directory, dedupe, describe_fetch_error, run_batch
+from .extract import extract_contacts
 from .fetch import Fetcher, RobotsDisallowed
 from .find_directory import find_directory_link
 from .forms import parse_form
@@ -15,16 +16,6 @@ from .models import Contact
 from .state_directory import parse_state_directory
 
 app = typer.Typer(help="AutoReach: find contacts in staff directories.", no_args_is_help=True)
-
-
-def _describe_fetch_error(e: Exception, url: str, render: bool) -> str:
-    if isinstance(e, httpx.HTTPStatusError):
-        status = e.response.status_code
-        msg = f"HTTP {status} fetching {url}"
-        if status in (403, 429) and not render:
-            msg += " - the site may be blocking non-browser requests; try again with --render"
-        return msg
-    return f"Could not fetch {url}: {e}"
 
 
 @app.callback()
@@ -45,36 +36,17 @@ def extract(
     """Pull names, titles, departments and emails from a staff directory page."""
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 
-    contacts: list[Contact] = []
-    fetched = 0
     if Path(source).is_file():
         contacts = extract_contacts(Path(source).read_text(encoding="utf-8"), source)
         fetched = 1
     else:
         fetcher = Fetcher(cache_dir=cache_dir, delay=delay, use_cache=not no_cache)
-        queue, seen = [source], set()
-        while queue and fetched < pages:
-            url = queue.pop(0)
-            if url in seen:
-                continue
-            seen.add(url)
-            try:
-                html = fetcher.get_html(url, render=render)
-            except RobotsDisallowed as e:
-                typer.echo(f"Skipped: {e}", err=True)
-                continue
-            except (httpx.HTTPError, RuntimeError) as e:
-                typer.echo(f"Skipped: {_describe_fetch_error(e, url, render)}", err=True)
-                continue
-            fetched += 1
-            contacts.extend(extract_contacts(html, url))
-            queue.extend(u for u in find_page_links(html, url) if u not in seen)
+        contacts, skips, fetched = crawl_directory(fetcher, source, pages=pages, render=render)
+        for msg in skips:
+            typer.echo(f"Skipped: {msg}", err=True)
         typer.echo(f"Downloaded {fetcher.requests_made} page(s); the rest came from the cache.", err=True)
 
-    unique: dict[str, Contact] = {}
-    for c in contacts:
-        unique.setdefault(c.email or c.contact_form_url, c)
-    contacts = list(unique.values())
+    contacts = dedupe(contacts)
 
     out = output.open("w", newline="", encoding="utf-8") if output else sys.stdout
     try:
@@ -119,7 +91,7 @@ def form(
             typer.echo(f"Skipped: {e}", err=True)
             raise typer.Exit(code=1) from None
         except (httpx.HTTPError, RuntimeError) as e:
-            typer.echo(f"Skipped: {_describe_fetch_error(e, source, render)}", err=True)
+            typer.echo(f"Skipped: {describe_fetch_error(e, source, render)}", err=True)
             raise typer.Exit(code=1) from None
 
     cform = parse_form(html, base_url=source)
@@ -186,7 +158,7 @@ def find_directory_cmd(
             typer.echo(f"Skipped: {e}", err=True)
             raise typer.Exit(code=1) from None
         except (httpx.HTTPError, RuntimeError) as e:
-            typer.echo(f"Skipped: {_describe_fetch_error(e, source, render)}", err=True)
+            typer.echo(f"Skipped: {describe_fetch_error(e, source, render)}", err=True)
             raise typer.Exit(code=1) from None
         base_url = source
 
@@ -195,3 +167,56 @@ def find_directory_cmd(
         typer.echo("No staff directory link found on that page.", err=True)
         raise typer.Exit(code=1)
     typer.echo(url)
+
+
+@app.command()
+def batch(
+    domains: Path = typer.Argument(..., help="A text file of homepage URLs, one per line (# comments allowed)."),
+    output: Path = typer.Option(..., "-o", "--output", help="Combined CSV file to write."),
+    pages: int = typer.Option(1, "--pages", help="Follow up to this many directory pages per site."),
+    render: bool = typer.Option(False, "--render", help="Load pages in a browser first, for JavaScript-built ones."),
+    delay: float = typer.Option(1.0, "--delay", help="Seconds to wait between requests to the same site."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Download pages again instead of using saved copies."),
+    cache_dir: Path = typer.Option(Path(".cache/html"), "--cache-dir"),
+) -> None:
+    """Find and extract each site's staff directory, from a list of
+    homepages, into one combined CSV. Combines find-directory and extract
+    so you don't have to run them one site at a time."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+
+    sites = [
+        line for raw in domains.read_text(encoding="utf-8").splitlines()
+        if (line := raw.strip()) and not line.startswith("#")
+    ]
+    if not sites:
+        typer.echo(f"No URLs found in {domains}.", err=True)
+        raise typer.Exit(code=1)
+
+    fetcher = Fetcher(cache_dir=cache_dir, delay=delay, use_cache=not no_cache)
+    results = run_batch(sites, fetcher, pages=pages, render=render)
+
+    contacts: list[Contact] = []
+    sites_with_contacts = 0
+    for r in results:
+        for msg in r.skips:
+            typer.echo(f"{r.site}: skipped - {msg}", err=True)
+        if r.directory_url is None:
+            if not r.skips:
+                typer.echo(f"{r.site}: no staff directory link found", err=True)
+            continue
+        contacts.extend(r.contacts)
+        if r.contacts:
+            sites_with_contacts += 1
+        typer.echo(f"{r.site}: {r.directory_url} -> {len(r.contacts)} contact(s)", err=True)
+
+    contacts = dedupe(contacts)
+    with output.open("w", newline="", encoding="utf-8") as out:
+        writer = csv.DictWriter(out, fieldnames=Contact.columns())
+        writer.writeheader()
+        writer.writerows(c.row() for c in contacts)
+
+    typer.echo(
+        f"Found directories on {sites_with_contacts} of {len(sites)} site(s), "
+        f"wrote {len(contacts)} contact(s) total to {output}.",
+        err=True,
+    )

@@ -35,7 +35,12 @@ autoreach import-state-directory directory.xlsx -o contacts.csv
 
 # Don't know the staff directory URL? Find it from the homepage first
 autoreach find-directory https://www.example-schools.org
+
+# A list of homepages -> one combined contacts CSV (finds each site's
+# directory itself, via find-directory)
+autoreach batch domains.txt -o contacts.csv
 ```
+`domains.txt` is one homepage URL per line; `#`-prefixed lines are comments.
 
 What it does:
 - Checks `robots.txt` and skips pages it disallows.
