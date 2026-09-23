@@ -15,9 +15,23 @@ from .fetch import Fetcher, RobotsDisallowed
 from .find_directory import find_directory_link
 from .forms import parse_form
 from .models import Contact
+from .role import filter_by_role
 from .state_directory import parse_state_directory
 
 app = typer.Typer(help="AutoReach: find contacts in staff directories.", no_args_is_help=True)
+
+ROLE_OPTION = typer.Option(None, "--role", help="Only keep contacts whose title matches one of these roles (comma-separated, e.g. 'principal,counselor').")
+INCLUDE_UNLABELED_OPTION = typer.Option(False, "--include-unlabeled", help="With --role, also keep contacts that have no title at all.")
+
+
+def _apply_role_filter(contacts: list[Contact], role: str | None, include_unlabeled: bool) -> list[Contact]:
+    if not role:
+        return contacts
+    roles = [r.strip() for r in role.split(",") if r.strip()]
+    before = len(contacts)
+    contacts = filter_by_role(contacts, roles, include_unlabeled=include_unlabeled)
+    typer.echo(f"Role filter ({', '.join(roles)}): kept {len(contacts)} of {before} contact(s).", err=True)
+    return contacts
 
 
 @app.callback()
@@ -34,6 +48,8 @@ def extract(
     delay: float = typer.Option(1.0, "--delay", help="Seconds to wait between requests to the same site."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Download pages again instead of using saved copies."),
     cache_dir: Path = typer.Option(Path(".cache/html"), "--cache-dir"),
+    role: str = ROLE_OPTION,
+    include_unlabeled: bool = INCLUDE_UNLABELED_OPTION,
 ) -> None:
     """Pull names, titles, departments and emails from a staff directory page."""
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
@@ -49,6 +65,7 @@ def extract(
         typer.echo(f"Downloaded {fetcher.requests_made} page(s); the rest came from the cache.", err=True)
 
     contacts = dedupe(contacts)
+    contacts = _apply_role_filter(contacts, role, include_unlabeled)
 
     out = output.open("w", newline="", encoding="utf-8") if output else sys.stdout
     try:
@@ -184,6 +201,8 @@ def batch(
     delay: float = typer.Option(1.0, "--delay", help="Seconds to wait between requests to the same site."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Download pages again instead of using saved copies."),
     cache_dir: Path = typer.Option(Path(".cache/html"), "--cache-dir"),
+    role: str = ROLE_OPTION,
+    include_unlabeled: bool = INCLUDE_UNLABELED_OPTION,
 ) -> None:
     """Find and extract each site's staff directory, from a list of
     homepages, into one combined CSV. Combines find-directory and extract
@@ -216,6 +235,7 @@ def batch(
         typer.echo(f"{r.site}: {r.directory_url} -> {len(r.contacts)} contact(s)", err=True)
 
     contacts = dedupe(contacts)
+    contacts = _apply_role_filter(contacts, role, include_unlabeled)
     with output.open("w", newline="", encoding="utf-8") as out:
         writer = csv.DictWriter(out, fieldnames=Contact.columns())
         writer.writeheader()
