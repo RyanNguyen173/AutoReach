@@ -11,6 +11,7 @@ from .extract import extract_contacts, find_page_links
 from .fetch import Fetcher, RobotsDisallowed
 from .forms import parse_form
 from .models import Contact
+from .state_directory import parse_state_directory
 
 app = typer.Typer(help="AutoReach: find contacts in staff directories.", no_args_is_help=True)
 
@@ -142,3 +143,20 @@ def form(
             "sent automatically.",
             err=True,
         )
+
+
+@app.command("import-state-directory")
+def import_state_directory_cmd(
+    source: Path = typer.Argument(..., help="A state education department's directory .xlsx file."),
+    output: Path = typer.Option(..., "-o", "--output", help="CSV file to write."),
+) -> None:
+    """Read a state-published school directory spreadsheet (one principal
+    email per school) straight into a contacts CSV. No scraping needed."""
+    contacts = parse_state_directory(source, source_url=str(source))
+
+    with output.open("w", newline="", encoding="utf-8") as out:
+        writer = csv.DictWriter(out, fieldnames=Contact.columns())
+        writer.writeheader()
+        writer.writerows(c.row() for c in contacts)
+
+    typer.echo(f"Read {source}, wrote {len(contacts)} contact(s) with an email to {output}.", err=True)
