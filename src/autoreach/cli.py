@@ -4,6 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
+import httpx
 import typer
 
 from .extract import extract_contacts, find_page_links
@@ -13,6 +14,16 @@ from .models import Contact
 from .state_directory import parse_state_directory
 
 app = typer.Typer(help="AutoReach: find contacts in staff directories.", no_args_is_help=True)
+
+
+def _describe_fetch_error(e: Exception, url: str, render: bool) -> str:
+    if isinstance(e, httpx.HTTPStatusError):
+        status = e.response.status_code
+        msg = f"HTTP {status} fetching {url}"
+        if status in (403, 429) and not render:
+            msg += " - the site may be blocking non-browser requests; try again with --render"
+        return msg
+    return f"Could not fetch {url}: {e}"
 
 
 @app.callback()
@@ -51,6 +62,9 @@ def extract(
             except RobotsDisallowed as e:
                 typer.echo(f"Skipped: {e}", err=True)
                 continue
+            except (httpx.HTTPError, RuntimeError) as e:
+                typer.echo(f"Skipped: {_describe_fetch_error(e, url, render)}", err=True)
+                continue
             fetched += 1
             contacts.extend(extract_contacts(html, url))
             queue.extend(u for u in find_page_links(html, url) if u not in seen)
@@ -84,7 +98,9 @@ def extract(
 @app.command()
 def form(
     source: str = typer.Argument(..., help="A contact_form_url from a CSV, or a saved .html file."),
+    render: bool = typer.Option(False, "--render", help="Load the page in a browser first, for JavaScript-built pages."),
     delay: float = typer.Option(1.0, "--delay"),
+    no_cache: bool = typer.Option(False, "--no-cache"),
     cache_dir: Path = typer.Option(Path(".cache/html"), "--cache-dir"),
 ) -> None:
     """Show the fields on a "contact this person" form page, so you know what a
@@ -95,11 +111,14 @@ def form(
     if Path(source).is_file():
         html = Path(source).read_text(encoding="utf-8")
     else:
-        fetcher = Fetcher(cache_dir=cache_dir, delay=delay)
+        fetcher = Fetcher(cache_dir=cache_dir, delay=delay, use_cache=not no_cache)
         try:
-            html = fetcher.get_html(source)
+            html = fetcher.get_html(source, render=render)
         except RobotsDisallowed as e:
             typer.echo(f"Skipped: {e}", err=True)
+            raise typer.Exit(code=1) from None
+        except (httpx.HTTPError, RuntimeError) as e:
+            typer.echo(f"Skipped: {_describe_fetch_error(e, source, render)}", err=True)
             raise typer.Exit(code=1) from None
 
     cform = parse_form(html, base_url=source)

@@ -1,7 +1,7 @@
 import csv
 import threading
 from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -64,6 +64,35 @@ def test_second_fetch_uses_cache(site, tmp_path):
     second = Fetcher(cache_dir=cache, delay=0)
     assert "Maria" in second.get_html(f"{site}/staff/")
     assert second.requests_made == 0
+
+
+class ForbiddenHandler(BaseHTTPRequestHandler):
+    """Always answers 403 - like a site blocking non-browser requests."""
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        self.send_response(403)
+        self.end_headers()
+        self.wfile.write(b"Forbidden")
+
+
+def test_page_403_is_skipped_not_a_crash(tmp_path):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ForbiddenHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        out = tmp_path / "contacts.csv"
+        result = CliRunner().invoke(app, [
+            "extract", f"http://127.0.0.1:{server.server_port}/staff", "--delay", "0",
+            "--cache-dir", str(tmp_path / "cache"), "-o", str(out),
+        ])
+        assert result.exit_code == 1
+        assert "HTTP 403" in result.output
+        assert "--render" in result.output
+        assert "Traceback" not in result.output
+    finally:
+        server.shutdown()
 
 
 def test_cli_follows_pages_and_writes_csv(site, tmp_path):
