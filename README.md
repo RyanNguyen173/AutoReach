@@ -27,6 +27,10 @@ autoreach extract https://www.example-schools.org/staff --render -o contacts.csv
 
 # A page you saved from your browser (File > Save Page As)
 autoreach extract saved_page.html -o contacts.csv
+
+# Some states publish an official directory of every school's principal as a
+# spreadsheet - no scraping needed
+autoreach import-state-directory directory.xlsx -o contacts.csv
 ```
 
 What it does:
