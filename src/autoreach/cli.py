@@ -9,6 +9,7 @@ import typer
 
 from .ai_fallback import find_directory_via_ai
 from .crawl import crawl_directory, dedupe, describe_fetch_error, run_batch
+from .env import load_dotenv
 from .extract import extract_contacts
 from .fetch import Fetcher, RobotsDisallowed
 from .find_directory import find_directory_link
@@ -21,7 +22,7 @@ app = typer.Typer(help="AutoReach: find contacts in staff directories.", no_args
 
 @app.callback()
 def main() -> None:
-    pass
+    load_dotenv()
 
 
 @app.command()

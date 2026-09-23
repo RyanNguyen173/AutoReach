@@ -19,13 +19,18 @@ pip install -e ".[render]" && playwright install chromium
 ### Optional: AI fallback for `find-directory` / `batch`
 `find-directory`'s heuristic is deliberately conservative - on a page where nothing looks
 confidently like a staff directory, it returns nothing rather than guess wrong. To have it
-ask a cheap model (Gemini) as a fallback in that case, set an API key:
+ask a cheap model (Gemini) as a fallback in that case, set an API key - either in your shell:
 ```bash
 export GEMINI_API_KEY="your-key-here"
 ```
-With no key set, this is a no-op - everything works exactly as before, just without the
-fallback. Responses are cached in `.cache/ai/`, so re-running the same page never costs a
-second API call. Optionally set `GEMINI_MODEL` to use a different model (default: `gemini-2.0-flash`).
+or in a `.env` file in the project root (already gitignored, so it's never committed):
+```
+GEMINI_API_KEY=your-key-here
+```
+With no key set either way, this is a no-op - everything works exactly as before, just
+without the fallback. Responses are cached in `.cache/ai/`, so re-running the same page
+never costs a second API call. Optionally set `GEMINI_MODEL` to use a different model
+(default: `gemini-2.0-flash`).
 
 ## Usage
 ```bash
